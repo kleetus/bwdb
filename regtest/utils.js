@@ -33,22 +33,15 @@ exports.importWalletDat = function(opts, callback) {
       if (err) {
         callback(err);
       }
-      //with very large wallets, this will double the memory requirements
-      response.addresses = addresses.slice(0);
-      var chunkSize = 2000;
-      var chunks = utils.splitArray(addresses, chunkSize);
-      async.eachSeries(chunks, function(chunk, next) {
-        opts.client.importAddresses(response.walletId, chunk, function(err) {
-          if (err) {
-            callback(err);
-          }
-          next();
-        });
-      }, function(err) {
+      var params = {
+        multipart: true,
+        value: JSON.stringify(addresses)
+      };
+      opts.client.importAddresses(response.walletId, params, function(err) {
         if (err) {
-          return callback(err);
+          callback(err);
         }
-        callback(null, response);
+        callback();
       });
     });
   });

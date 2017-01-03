@@ -5,13 +5,13 @@
 process.title = 'bwdb-cli';
 process.env.BWDB_CLI = true;
 
-var crypto = require('crypto');
-
-var assert = require('assert');
 var async = require('async');
+var crypto = require('crypto');
+var fs = require('fs');
+var _ = require('lodash');
+var assert = require('assert');
 var bitcore = require('bitcore-lib');
 var program = require('commander');
-var ProgressBar = require('progress');
 
 var version = require('../package.json').version;
 var ClientConfig  = require('../lib/client/config');
@@ -129,27 +129,23 @@ config.setup(function(err) {
     .description('Import new addresses from a JSON or Bitcoin wallet.dat file')
     .action(config.unlockClientThrough(function(client, walletName, filepath) {
       var walletId = utils.getWalletIdFromName(walletName);
-      utils.readWalletFile(filepath, config.getNetworkName(), function(err, addresses) {
+      utils.readWalletFile(filepath, config.getNetworkName(), function(err, data) {
         if (err) {
           throw err;
         }
-        var total = addresses.length;
-        var progress = new ProgressBar('Importing addresses [:bar] :percent :current/:total', {
-          complete: '=',
-          incomplete: ' ',
-          width: 20,
-          total: total
-        });
-
-        var chunkSize = 100;
-        var chunks = utils.splitArray(addresses, chunkSize);
-        async.eachSeries(chunks, function(chunk, next) {
-          client.importAddresses(walletId, chunk, function(err) {
-            if (err) {
+        client.importAddresses(walletId, {
+          value: data,
+          multipart: true
+        }, function(err, res, json) {
+          if (err) {
+            throw err;
+          }
+          var jobId = json.jobId;
+          client.getJobInfo(jobId, function(err, res, json) {
+            if(err) {
               throw err;
             }
-            progress.tick(chunkSize);
-            next();
+            console.log(json);
           });
         });
       });
@@ -248,14 +244,14 @@ config.setup(function(err) {
         var startHeight = body.result[0];
         var endHeight = body.result[1];
         assert(startHeight < endHeight, 'Starting block height must be less than ending ' +
-          'block height. The dates provided translated to block heights that appear to be incorrect. ' + 
+          'block height. The dates provided translated to block heights that appear to be incorrect. ' +
           'Please ensure \'timestampindex\' is enabled in bitcoin.conf.');
         var walletId = utils.getWalletIdFromName(walletName);
         options = {
           height: startHeight,
           index: 0,
           limit: 10,
-          end: endHeight 
+          end: endHeight
         };
         var stream = client.getTransactionsListStream(walletId, options);
         stream.pipe(process.stdout);
