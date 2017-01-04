@@ -7,7 +7,7 @@ var proxyquire = require('proxyquire');
 
 var Client = require('../../lib/client');
 
-describe('Wallet Client', function() {
+describe('wallet Client', function() {
   describe('@constructor', function() {
     function checkProperties(client) {
       should.exist(client);
@@ -56,7 +56,7 @@ describe('Wallet Client', function() {
     });
   });
   describe('#_request', function() {
-    it.only('will set querystring with params if GET request', function(done) {
+    it('will set querystring with params if GET request', function(done) {
       var res = {
         headers: {
           'x-bitcoin-network': 'testnet',
@@ -64,13 +64,11 @@ describe('Wallet Client', function() {
           'x-bitcoin-hash': '000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363'
         }
       };
-      var body = {};
-      var req = {
+      var httpReq = sinon.stub().callsArgWith(1, res).returns({
         on: sinon.stub(),
         end: sinon.stub(),
         write: sinon.stub()
-      };
-      var httpReq = sinon.stub().callsArgWith(1, res).returns(req);
+      });
       var Client = proxyquire('../../lib/client/index', {
         http: {
           request: httpReq
@@ -78,7 +76,7 @@ describe('Wallet Client', function() {
       });
       var client = new Client({
         network: 'testnet',
-        url: 'something'
+        url: 'http://localhost'
       });
       client._signRequest = sinon.spy();
       client._processResponse = sinon.stub().callsArg(1);
@@ -89,7 +87,22 @@ describe('Wallet Client', function() {
           return done(err);
         }
         httpReq.callCount.should.equal(1);
-        //httpReq.args[0][0].qs.should.equal(params);
+        client._signRequest.callCount.should.equal(1);
+        client._processResponse.callCount.should.equal(1);
+        client._signRequest.args[0][0].should.deep.equal({
+          body: '',
+          'content-length': 17,
+          headers: {
+            'user-agent': 'bwdb-1.0.0-beta',
+           },
+           hostname: 'localhost',
+           json: true,
+           method: 'GET',
+           path: '/info?hello=world',
+           port: 80,
+           protocol: 'http:',
+           url: 'http://localhost'
+        });
         done();
       });
     });
@@ -202,22 +215,32 @@ describe('Wallet Client', function() {
         done();
       });
     });
-    it('will give error with network mismatch', function(done) {
-      var res = {
-        statusCode: 200,
-        headers: {
-          'x-bitcoin-network': 'livenet',
-          'x-bitcoin-height': 400000,
-          'x-bitcoin-hash': '000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363'
-        }
+    it.only('will give error with network mismatch', function(done) {
+      var EventEmitter = require('events').EventEmitter;
+      var res = new EventEmitter;
+      res.headers = {
+        'x-bitcoin-network': 'livenet',
+        'x-bitcoin-height': 400000,
+        'x-bitcoin-hash': '000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363'
       };
+      res.statusCode = 200;
+      res.setEncoding = sinon.stub();
+      var httpReq = sinon.stub().callsArgWith(1, res).returns({
+        on: sinon.stub(),
+        end: sinon.stub(),
+        write: sinon.stub()
+      });
+      var Client = proxyquire('../../lib/client/index', {
+        http: {
+          request: httpReq
+        }
+      });
       var body = {};
-      var request = sinon.stub().callsArgWith(1, null, res, JSON.stringify(body));
       var client = new Client({
         network: 'testnet',
         url: 'something'
       });
-      client._signRequest = request;
+      client._signRequest = sinon.spy();
       client.getNetworkName = sinon.stub().returns('testnet');
       client._request('GET', '/info', {}, function(err) {
         err.should.be.instanceOf(Error);
@@ -226,32 +249,43 @@ describe('Wallet Client', function() {
       });
     });
     it('will set bitcoin chain info', function(done) {
-      var res = {
-        headers: {
-          'x-bitcoin-network': 'testnet',
-          'x-bitcoin-height': 400000,
-          'x-bitcoin-hash': '000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363'
-        }
+      var EventEmitter = require('events').EventEmitter;
+      var res = new EventEmitter;
+      res.headers = {
+        'x-bitcoin-network': 'testnet',
+        'x-bitcoin-height': 400000,
+        'x-bitcoin-hash': '000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363'
       };
+      res.setEncoding = sinon.stub();
+      var httpReq = sinon.stub().callsArgWith(1, res).returns({
+        on: sinon.stub(),
+        end: sinon.stub(),
+        write: sinon.stub()
+      });
+      var Client = proxyquire('../../lib/client/index', {
+        http: {
+          request: httpReq
+        }
+      });
       var body = {};
-      var request = sinon.stub().callsArgWith(1, null, res, JSON.stringify(body));
       var client = new Client({
         network: 'testnet',
         url: 'something'
       });
-      client._signRequest = request;
+      client._signRequest = sinon.spy();
       var params = {hello: 'world'};
       client.getNetworkName = sinon.stub().returns('testnet');
-      client._request('GET', '/info', params, function(err, res1, body1) {
+      client._request('GET', '/info', params, function(err) {
         if (err) {
           return done(err);
         }
-        res1.should.equal(res);
-        body1.should.deep.equal(body);
         client.bitcoinHeight.should.equal(400000);
         client.bitcoinHash.should.equal('000000000007daca1852c480344ba1c24749780e06c3d4321ca04df545eb7363');
         done();
       });
+      res.emit('data', "{}");
+      res.emit('end');
+
     });
   });
   describe('#_put', function() {
